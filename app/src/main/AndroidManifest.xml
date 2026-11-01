@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:largeHeap="true">
+
+        <!--
+          A system TTS engine is a BOUND service:
+            - exported="true" is mandatory, or Settings can never bind to it.
+            - BIND_TEXT_TO_SPEECH_SERVICE guarantees only the system TTS manager (which holds
+              that signature permission) can bind. Do not add a permission of your own here.
+            - One engine per package; the intent-filter action is fixed by the framework.
+        -->
+        <service
+            android:name=".tts.SteerTtsService"
+            android:exported="true"
+            android:label="@string/tts_engine_name"
+            android:permission="android.permission.BIND_TEXT_TO_SPEECH_SERVICE">
+
+            <intent-filter>
+                <action android:name="android.intent.action.TTS_SERVICE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.speech.tts"
+                android:resource="@xml/tts_engine" />
+        </service>
+    </application>
+</manifest>
