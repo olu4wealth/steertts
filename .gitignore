@@ -1,0 +1,20 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aar
+
+# toolchain and SDK (outside this repo)
+/tmp/toolchain
+/tmp/gradle-home
+/tmp/gradle
+
+# generated Kotlin compiler output
+.kotlin/errors/
+.kt_metadata/
+.kt_kapt_stubs/
