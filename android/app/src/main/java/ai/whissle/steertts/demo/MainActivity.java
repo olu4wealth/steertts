@@ -46,9 +46,13 @@ import java.util.Map;
  */
 public class MainActivity extends Activity implements VoicesScreen.Host {
     static final String TAG = "SteerTTS";
-    private static final String[] TABS = {"listen", "assistant", "voices"};
-    private static final String[] TAB_NAMES = {"Listen", "Assistant", "Voices"};
-    private static final int[] TAB_ICONS = {R.drawable.ic_listen, R.drawable.ic_assistant, R.drawable.ic_voices};
+    // The Assistant tab is not part of this engine build: message readouts, call announce, meetings
+    // and screen reading needed notification access, READ_CALENDAR and Health Connect, which is what
+    // Play Protect objects to on a sideloaded APK. AssistantScreen is still compiled (the build()
+    // switch below references it) but nothing selects the tab, and `assistant` stays null.
+    private static final String[] TABS = {"listen", "voices"};
+    private static final String[] TAB_NAMES = {"Listen", "Voices"};
+    private static final int[] TAB_ICONS = {R.drawable.ic_listen, R.drawable.ic_voices};
 
     private final HandlerThread worker = new HandlerThread("steertts-engine", Process.THREAD_PRIORITY_URGENT_AUDIO);
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -256,7 +260,7 @@ public class MainActivity extends Activity implements VoicesScreen.Host {
             }
         }
         if (t.equals("listen")) listen.refresh();
-        if (t.equals("assistant")) assistant.refresh();
+        if (t.equals("assistant") && assistant != null) assistant.refresh();
     }
 
     @SuppressWarnings("deprecation")

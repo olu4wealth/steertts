@@ -39,6 +39,30 @@ What this build was checked against, mechanically:
 Not checked here: that it *sounds* right. That needs a phone — this machine has no arm64 device
 and no host C compiler to render a reference WAV.
 
+## This build is the engine, not the assistant
+
+Upstream SteerTTS also reads notifications and messages aloud, announces calls, reads calendars and
+health summaries, and ships an accessibility screen reader. Each of those needs a sensitive
+permission — notification access, `READ_CALENDAR`, Health Connect — and a sideloaded APK from an
+unknown signer that asks for them is exactly what Play Protect flags. It blocked this APK with a
+warning about accessing private and financial data, which is a fair description of a notification
+listener: it can read anything a notification carries, including bank messages.
+
+None of that is needed to synthesize speech, so the permissions and the components that use them
+were removed: no notification listener, no accessibility service, no calendar, no boot receiver, no
+exact alarms, no Health Connect. The app is now two tabs (Listen and Voices) plus "Read with
+SteerTTS" in the share sheet for documents and links. It requests four ordinary permissions:
+
+```
+android.permission.INTERNET                       (fetch a shared link)
+android.permission.POST_NOTIFICATIONS             (media notification while reading)
+android.permission.FOREGROUND_SERVICE             (playback survives screen-off)
+android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK
+```
+
+If you *want* the assistant features, they are still in the source: re-add the manifest entries and
+the permissions (see git history), and install with Play Protect's "install anyway" prompt.
+
 ## Why this does not build the original Kotlin app
 
 The first version of this project (kept in [`legacy/`](legacy) for reference) was written from a
