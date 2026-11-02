@@ -1,0 +1,13 @@
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "steertts-android"
+include ":app"
+// :demochat is a stand-in messaging app used only to film readout demos ("not part of the product").
+// It targets compileSdk 34 / Build Tools 35.0.0, which this machine does not have, and nothing in
+// the TTS engine needs it, so it stays out of this build.
+// include ":demochat"

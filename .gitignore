@@ -1,20 +1,32 @@
-*.iml
-.gradle/
-local.properties
-.idea/
+# ---------------------------------------------------------------- Android build output
 build/
+.gradle/
+.cxx/
+local.properties
 captures/
 .externalNativeBuild/
-.cxx/
 *.apk
 *.aar
+*.iml
+.idea/
 
-# toolchain and SDK (outside this repo)
-/tmp/toolchain
-/tmp/gradle-home
-/tmp/gradle
+# ---------------------------------------------------------------- model weights
+# Licence-gated (CC BY-NC 4.0): fetched per person with tools/fetch_model.py, never committed.
+c/models/
 
-# generated Kotlin compiler output
-.kotlin/errors/
+# Built APKs handed to a phone.
+dist/
+
+# ---------------------------------------------------------------- toolchain
+# JDK, NDK, CMake, Gradle home and the signing key. These live next to the repository
+# (../toolchain) and are several hundred MB; ignored in case they are placed inside it.
+toolchain/
+/tmp/
+
+# Build logs from tools/build-apk.ps1
+*.log
+
+# ---------------------------------------------------------------- legacy/ (Kotlin scaffold)
+.kotlin/
 .kt_metadata/
 .kt_kapt_stubs/
