@@ -29,16 +29,17 @@ param(
     # Model package (config.json, acoustic.safetensors, vocoder.safetensors, voices.*, native/front/).
     [string]$ModelDir,
 
-    # Toolchain. Defaults match the layout this machine was set up with: the JDK, NDK, CMake and
-    # signing key live in a toolchain/ directory *next to* the repository (tools/../..), because
-    # they are several hundred MB and have nothing to do with the source.
-    [string]$Jdk = (Join-Path $PSScriptRoot '../../toolchain/jdk/jdk-21.0.13+9'),
-    [string]$Ndk = (Join-Path $PSScriptRoot '../../toolchain/ndk27'),
-    [string]$Cmake = (Join-Path $PSScriptRoot '../../toolchain/cmake'),
-    [string]$Sdk = $env:ANDROID_HOME,
+    # Toolchain. Left empty they are discovered under ../toolchain (next to the repository, because
+    # the JDK/NDK/CMake/key are hundreds of MB and have nothing to do with the source). They are
+    # resolved in the body, not here: $PSScriptRoot is empty while param() defaults are evaluated
+    # under Windows PowerShell 5.1 (which is what build-apk.cmd uses).
+    [string]$Jdk,
+    [string]$Ndk,
+    [string]$Cmake,
+    [string]$Sdk,
 
     # Signing. The key must stay the same for updates to an installed app to be accepted.
-    [string]$Keystore = (Join-Path $PSScriptRoot '../../toolchain/steertts-release.keystore'),
+    [string]$Keystore,
     [string]$StorePassword = 'steertts2026',
     [string]$KeyAlias = 'steertts',
     [string]$KeyPassword = 'steertts2026'
@@ -47,11 +48,22 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $android = Join-Path $repo 'android'
+$toolchain = Join-Path (Split-Path $repo -Parent) 'toolchain'
 
 function Resolve-OrThrow([string]$Path, [string]$What) {
     if (-not (Test-Path $Path)) { throw "$What not found at '$Path'. Pass it explicitly, e.g. -$What <dir>." }
     return (Resolve-Path $Path).Path
 }
+
+# ---------------------------------------------------------------- toolchain defaults
+if (-not $Jdk) {
+    $candidate = Get-ChildItem (Join-Path $toolchain 'jdk') -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName 'bin/java.exe') } | Select-Object -First 1
+    if ($candidate) { $Jdk = $candidate.FullName }
+}
+if (-not $Ndk) { $Ndk = Join-Path $toolchain 'ndk27' }
+if (-not $Cmake) { $Cmake = Join-Path $toolchain 'cmake' }
+if (-not $Keystore) { $Keystore = Join-Path $toolchain 'steertts-release.keystore' }
 
 # ---------------------------------------------------------------- inputs
 if (-not $ModelDir) { $ModelDir = Join-Path $repo 'c/models/steer-tts-edge' }
@@ -80,12 +92,16 @@ $Cmake = Resolve-OrThrow (Join-Path $Cmake 'bin/cmake.exe') 'Cmake' | Split-Path
 $env:JAVA_HOME = $Jdk
 $env:ANDROID_HOME = $Sdk
 $env:ANDROID_SDK_ROOT = $Sdk
-# AGP writes scratch files through java.io.tmpdir; keep them inside the repo so a locked-down
-# %TEMP% cannot break the build.
-$tmp = Join-Path $repo 'toolchain/tmp'
+# AGP writes scratch files through java.io.tmpdir; keep them with the toolchain so a locked-down
+# %TEMP% cannot break the build and the repository stays source-only.
+$tmp = Join-Path $toolchain 'tmp'
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 $env:TMP = $tmp; $env:TEMP = $tmp
-if (-not $env:GRADLE_USER_HOME) { $env:GRADLE_USER_HOME = Join-Path $repo 'toolchain/gradle-home' }
+# Gradle's download cache is ~500 MB and must not land inside the repository: keep it with the
+# toolchain, next to the JDK/NDK, unless the caller already points somewhere else.
+if (-not $env:GRADLE_USER_HOME) {
+    $env:GRADLE_USER_HOME = Join-Path $toolchain 'gradle-home'
+}
 
 # local.properties is machine-specific (gitignored); regenerate it every run.
 @"
