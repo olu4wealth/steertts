@@ -9,9 +9,10 @@ every app that speaks (TalkBack, navigation, notification readers) uses this voi
 
 |  |  |
 |---|---|
-| Model | SteerTTS Edge — int4, 11.84 MB, ~25 ms to first audio |
+| Model | SteerTTS Edge — int4, 12.5 MB of weights, ~25 ms to first audio |
+| Voices | 200 (female/male defaults, each with its own neutral delivery) |
 | Speed | RTF ≈ 0.017–0.020 on a Pixel 10 (≈ 50× faster than real time) |
-| APK | ≈ 13.5 MB, `arm64-v8a` only, Android 8.0+ (API 26) |
+| APK | 12.9 MB, `arm64-v8a` only, Android 8.0+ (API 26) |
 | Network | none — the model runs on the phone, nothing is uploaded |
 | Licence | weights **CC BY-NC 4.0, non-commercial only** (see below) |
 
@@ -24,6 +25,19 @@ library by the NDK, so it is the same code that runs on the desktop and the Rasp
 What is *not* included in this repository: **the weights**. They are licence-gated on Hugging Face,
 so each person fetches them with their own account (below). Without them the APK installs and
 registers as an engine but produces no audio.
+
+What this build was checked against, mechanically:
+
+* `tools/check_model.py` passes on the package: 11 files, 200 voices, `acoustic.safetensors`
+  720 tensors, `vocoder.safetensors` 107 tensors, voice table `s[200,64]` F16 with
+  `spk_mean[200,12]` — the per-voice means of the 12 controls.
+* the 11 model assets inside the APK are **byte-identical** (SHA-256) to the downloaded package;
+* `libsteertts_jni.so` exports all 11 `Java_ai_whissle_steertts_demo_SteerTTS_*` entry points the
+  Java side declares;
+* the APK is signed (v1/v2) and `arm64-v8a` only.
+
+Not checked here: that it *sounds* right. That needs a phone — this machine has no arm64 device
+and no host C compiler to render a reference WAV.
 
 ## Why this does not build the original Kotlin app
 
