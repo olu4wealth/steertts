@@ -134,6 +134,20 @@ Notes on the build:
   Android 15+ devices with 16 KB memory pages.
 * Keep `../toolchain/steertts-release.keystore` safe. Android only accepts an update signed with
   the same key, so losing it means uninstalling (and losing settings) before the next install.
+* **Signing passwords are not in this repository**, and the build refuses to run without them
+  rather than falling back to a weak default. `tools/build-apk.ps1` reads
+  `STEERTTS_STORE_PASSWORD`, `STEERTTS_KEY_PASSWORD` and `STEERTTS_KEY_ALIAS` from the environment
+  first, then from `../toolchain/signing.properties`:
+
+  ```
+  STEERTTS_STORE_PASSWORD=...
+  STEERTTS_KEY_PASSWORD=...
+  STEERTTS_KEY_ALIAS=...
+  ```
+
+  The passwords reach Gradle as `ORG_GRADLE_PROJECT_*` environment variables, so they never appear
+  in a command line, a process listing or a build log. `.\build-apk.cmd -Configuration debug` needs
+  no key at all.
 
 ## Install on the phone
 

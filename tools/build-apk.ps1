@@ -39,10 +39,14 @@ param(
     [string]$Sdk,
 
     # Signing. The key must stay the same for updates to an installed app to be accepted.
+    # Passwords are never stored in this repository: they come from the environment
+    # (STEERTTS_STORE_PASSWORD / STEERTTS_KEY_PASSWORD) or from a signing.properties file kept
+    # next to the keystore, outside the repo.
     [string]$Keystore,
-    [string]$StorePassword = 'steertts2026',
-    [string]$KeyAlias = 'steertts',
-    [string]$KeyPassword = 'steertts2026'
+    [string]$KeyAlias,
+    [string]$StorePassword,
+    [string]$KeyPassword,
+    [string]$SigningFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,6 +68,32 @@ if (-not $Jdk) {
 if (-not $Ndk) { $Ndk = Join-Path $toolchain 'ndk27' }
 if (-not $Cmake) { $Cmake = Join-Path $toolchain 'cmake' }
 if (-not $Keystore) { $Keystore = Join-Path $toolchain 'steertts-release.keystore' }
+
+# ---------------------------------------------------------------- signing secrets
+# The keystore lives outside the repository and so does its password: read it from the environment
+# first (a CI-friendly one-liner), else from a properties file beside the key. Nothing secret is
+# ever written into a tracked file, so this repository can be public.
+if (-not $SigningFile) { $SigningFile = Join-Path $toolchain 'signing.properties' }
+
+function Get-SigningValue([string]$Name) {
+    $fromEnv = [Environment]::GetEnvironmentVariable($Name)
+    if ($fromEnv) { return $fromEnv }
+    if (Test-Path $SigningFile) {
+        foreach ($line in Get-Content $SigningFile) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed -or $trimmed.StartsWith('#') -or $trimmed.StartsWith(';')) { continue }
+            $eq = $trimmed.IndexOf('=')
+            if ($eq -gt 0 -and $trimmed.Substring(0, $eq).Trim() -eq $Name) {
+                return $trimmed.Substring($eq + 1).Trim()
+            }
+        }
+    }
+    return $null
+}
+
+if (-not $StorePassword) { $StorePassword = Get-SigningValue 'STEERTTS_STORE_PASSWORD' }
+if (-not $KeyPassword) { $KeyPassword = Get-SigningValue 'STEERTTS_KEY_PASSWORD' }
+if (-not $KeyAlias) { $KeyAlias = Get-SigningValue 'STEERTTS_KEY_ALIAS' }
 
 # ---------------------------------------------------------------- inputs
 if (-not $ModelDir) { $ModelDir = Join-Path $repo 'c/models/steer-tts-edge' }
@@ -119,12 +149,32 @@ $gradleArgs = @(
 )
 if ($Configuration -eq 'release') {
     $Keystore = Resolve-OrThrow $Keystore 'Keystore'
-    $gradleArgs += @(
-        "-PSTEERTTS_STORE_FILE=$($Keystore.Replace('\', '/'))",
-        "-PSTEERTTS_STORE_PASSWORD=$StorePassword",
-        "-PSTEERTTS_KEY_ALIAS=$KeyAlias",
-        "-PSTEERTTS_KEY_PASSWORD=$KeyPassword"
-    )
+    if (-not $StorePassword -or -not $KeyPassword) {
+        throw @"
+The signing password is not set, and it is deliberately not stored in this repository.
+
+Export it for this shell:
+
+    `$env:STEERTTS_STORE_PASSWORD = '...'
+    `$env:STEERTTS_KEY_PASSWORD   = '...'
+
+or put it in $SigningFile (outside the repository):
+
+    STEERTTS_STORE_PASSWORD=...
+    STEERTTS_KEY_PASSWORD=...
+    STEERTTS_KEY_ALIAS=...
+
+Or build -Configuration debug, which needs no key.
+"@
+    }
+    if (-not $KeyAlias) { throw "Key alias unknown: pass -KeyAlias, or set STEERTTS_KEY_ALIAS." }
+
+    # Handed to Gradle as project properties through the environment rather than on the command
+    # line, so the passwords never appear in a process listing or a build log.
+    $env:ORG_GRADLE_PROJECT_STEERTTS_STORE_FILE = $Keystore.Replace('\', '/')
+    $env:ORG_GRADLE_PROJECT_STEERTTS_STORE_PASSWORD = $StorePassword
+    $env:ORG_GRADLE_PROJECT_STEERTTS_KEY_ALIAS = $KeyAlias
+    $env:ORG_GRADLE_PROJECT_STEERTTS_KEY_PASSWORD = $KeyPassword
 }
 
 Write-Host "Building $Configuration APK" -ForegroundColor Cyan
