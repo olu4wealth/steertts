@@ -8,11 +8,38 @@ plugins {
 def modelDir = file(project.findProperty("steerttsModel") ?: "../../c/models/steer-tts-edge")
 def modelAssets = layout.buildDirectory.dir("generated/steertts-model")
 
-tasks.register("copySteerttsModel", Copy) {
-    doFirst {
-        if (!new File(modelDir, "config.json").exists())
-            throw new GradleException("no SteerTTS edge model in ${modelDir}: run c/tools/get_models.sh or pass -PsteerttsModel=DIR")
+// What a usable package contains: the engine opens all of these, and a partial download produces an
+// APK that installs, registers as an engine and then fails at the first utterance.
+def modelFiles = [
+        "config.json": false,
+        "acoustic.safetensors": false,
+        "vocoder.safetensors": false,
+        "voices.json": false,
+        "voices.safetensors": false,
+        "native/front/SYMBOLS.txt": false,
+        "native/front/lexicon.bin": false,
+        "native/front/gru.bin": false,
+]
+
+// The check is its own task on purpose. A Copy task whose source directory is missing has no
+// source, so Gradle marks it NO-SOURCE and skips it - including its doFirst - which silently
+// produced an APK with no model in it. A task with only doLast always runs.
+tasks.register("validateSteerttsModel") {
+    description = "Fails unless the SteerTTS model package is complete."
+    doLast {
+        def missing = modelFiles.keySet().findAll { !new File(modelDir, it).exists() }
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                    "no usable SteerTTS edge model in ${modelDir}\n" +
+                    "  missing: ${missing.join(', ')}\n" +
+                    "  fetch it with:  \$env:HF_TOKEN='hf_...'; python tools/fetch_model.py\n" +
+                    "  or point at an existing package: -PsteerttsModel=DIR")
+        }
     }
+}
+
+tasks.register("copySteerttsModel", Copy) {
+    dependsOn "validateSteerttsModel"
     from(modelDir) {
         include "config.json", "acoustic.safetensors", "vocoder.safetensors", "voices.json", "voices.safetensors",
                 "native/front/**"

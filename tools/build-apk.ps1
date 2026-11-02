@@ -97,6 +97,9 @@ if (-not $KeyAlias) { $KeyAlias = Get-SigningValue 'STEERTTS_KEY_ALIAS' }
 
 # ---------------------------------------------------------------- inputs
 if (-not $ModelDir) { $ModelDir = Join-Path $repo 'c/models/steer-tts-edge' }
+# Make it absolute: Gradle resolves a relative -PsteerttsModel against the *project* directory, not
+# this shell's, so a relative path here would silently point somewhere else.
+if (Test-Path $ModelDir) { $ModelDir = (Resolve-Path $ModelDir).Path }
 if (-not (Test-Path (Join-Path $ModelDir 'config.json'))) {
     throw @"
 No model package at '$ModelDir'.
