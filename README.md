@@ -1,172 +1,32 @@
 # SteerTTS — an Android text-to-speech engine
 
-An offline, on-device TTS engine for Android, built around **SteerTTS**: a 23M-parameter English
-voice you steer with numbers (pitch, rate, loudness, pitch range, spectral tilt, HNR and six more),
-by the [Whissle AI](https://github.com/WhissleAI/steer-tts) team.
+An offline TTS engine for Android built on **SteerTTS**, a 23M-parameter English voice you steer with
+numbers: pitch, rate, loudness, pitch range, spectral tilt and seven more. It runs entirely on the
+phone — nothing is uploaded.
 
-Install it, pick it in **Settings → Accessibility → Text-to-speech output → Preferred engine**, and
-every app that speaks (TalkBack, navigation, notification readers) uses this voice instead of Google's.
+Install it, choose it in **Settings → Accessibility → Text-to-speech output → Preferred engine**, and
+every app that speaks (TalkBack, navigation, notification readers) uses this voice.
 
-|  |  |
+| | |
 |---|---|
-| Model | SteerTTS Edge — int4, 12.5 MB of weights, ~25 ms to first audio |
-| Voices | 200 (female/male defaults, each with its own neutral delivery) |
-| Speed | RTF ≈ 0.017–0.020 on a Pixel 10 (≈ 50× faster than real time) |
-| APK | 12.9 MB, `arm64-v8a` only, Android 8.0+ (API 26) |
-| Network | none — the model runs on the phone, nothing is uploaded |
-| Licence | weights **CC BY-NC 4.0, non-commercial only** (see below) |
+| Model | SteerTTS Edge, int4 — 12.5 MB |
+| Voices | 200 |
+| Speed | RTF ≈ 0.02 on a Pixel 10 (≈ 50× real time), ~25 ms to first audio |
+| APK | 12.9 MB, `arm64-v8a`, Android 8.0+ (API 26) |
+| Licence | CC BY-NC 4.0 — non-commercial |
 
-## Status
+## Install
 
-The app builds and installs today. The engine is the upstream C library (hand-written kernels for
-the acoustic model, flow and vocoder — no ONNX Runtime, no Python), compiled into the APK's JNI
-library by the NDK, so it is the same code that runs on the desktop and the Raspberry Pi port.
+1. Build the APK (below), or use one from `dist/`.
+2. Copy it to the phone and open it; allow installation from that source.
+3. Settings → Accessibility → Text-to-speech output → Preferred engine → SteerTTS.
 
-What is *not* included in this repository: **the weights**. They are licence-gated on Hugging Face,
-so each person fetches them with their own account (below). Without them the APK installs and
-registers as an engine but produces no audio.
-
-What this build was checked against, mechanically:
-
-* `tools/check_model.py` passes on the package: 11 files, 200 voices, `acoustic.safetensors`
-  720 tensors, `vocoder.safetensors` 107 tensors, voice table `s[200,64]` F16 with
-  `spk_mean[200,12]` — the per-voice means of the 12 controls.
-* the 11 model assets inside the APK are **byte-identical** (SHA-256) to the downloaded package;
-* `libsteertts_jni.so` exports all 11 `Java_ai_whissle_steertts_demo_SteerTTS_*` entry points the
-  Java side declares;
-* the APK is signed (v1/v2) and `arm64-v8a` only.
-
-Not checked here: that it *sounds* right. That needs a phone — this machine has no arm64 device
-and no host C compiler to render a reference WAV.
-
-## This build is the engine, not the assistant
-
-Upstream SteerTTS also reads notifications and messages aloud, announces calls, reads calendars and
-health summaries, and ships an accessibility screen reader. Each of those needs a sensitive
-permission — notification access, `READ_CALENDAR`, Health Connect — and a sideloaded APK from an
-unknown signer that asks for them is exactly what Play Protect flags. It blocked this APK with a
-warning about accessing private and financial data, which is a fair description of a notification
-listener: it can read anything a notification carries, including bank messages.
-
-None of that is needed to synthesize speech, so the permissions and the components that use them
-were removed: no notification listener, no accessibility service, no calendar, no boot receiver, no
-exact alarms, no Health Connect. The app is now two tabs (Listen and Voices) plus "Read with
-SteerTTS" in the share sheet for documents and links. It requests four ordinary permissions:
-
-```
-android.permission.INTERNET                       (fetch a shared link)
-android.permission.POST_NOTIFICATIONS             (media notification while reading)
-android.permission.FOREGROUND_SERVICE             (playback survives screen-off)
-android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK
-```
-
-If you *want* the assistant features, they are still in the source: re-add the manifest entries and
-the permissions (see git history), and install with Play Protect's "install anyway" prompt.
-
-## Why this does not build the original Kotlin app
-
-The first version of this project (kept in [`legacy/`](legacy) for reference) was written from a
-specification that assumed the model was **one ONNX file** (`assets/model.onnx`) with twelve float
-inputs, run through ONNX Runtime Mobile. That assumption is wrong, and it is why that code cannot
-produce speech:
-
-* the weights ship as **safetensors** (`acoustic.safetensors`, `vocoder.safetensors`,
-  `voices.safetensors`), not ONNX;
-* inference is a **hand-written C engine** (`c/src/st_acoustic.c`, `st_flow.c`, `st_vocoder.c`)
-  that also does the mel front end, duration rounding, length regulation and the inverse STFT that
-  a naive `enc/dec/voc` graph export would leave to the caller;
-* the text front end is a **lexicon + int8 GRU G2P** (`c/src/st_wordpiece.c`, phonetic dictionary),
-  not a character table — `legacy/` stubs it out, so even with weights it would mispronounce.
-
-Rewriting that in Kotlin/ONNX Runtime would mean reimplementing ~10k lines of numeric code with no
-way to verify it. Using the upstream engine instead gives working audio, the real 12 controls, and
-the 200 bundled voices.
-
-## Get the model (one-time, per person)
-
-The weights are **CC BY-NC 4.0**: free for personal and research use, not for a commercial product
-or a paid/hosted service. Commercial use needs a written licence from Whissle
-(`ksingla@whissle.ai`).
-
-1. Accept the licence: <https://huggingface.co/WhissleAI/steer-tts-edge>
-2. Create a **read** token: <https://huggingface.co/settings/tokens>
-3. Fetch the package (~13 MB):
-
-```powershell
-$env:HF_TOKEN = 'hf_...'          # for this session only; do not commit it
-python tools/fetch_model.py       # -> c/models/steer-tts-edge
-```
-
-`tools/fetch_model.py` uses Python's TLS stack deliberately: on some Windows machines the system
-backend rejects the handshake with `SEC_E_NO_CREDENTIALS`, which breaks `curl.exe` and
-`Invoke-WebRequest` for huggingface.co.
-
-## Build
-
-Requirements (already installed on the machine this was set up on, under `../toolchain/`):
-
-* **JDK 17–21** (not 25 — Gradle 8.13 will not run on it)
-* **Android SDK** with platform 36 and Build Tools 35.0.1
-* **NDK r27b** (`27.1.12297006`)
-* **CMake 3.22.1**
-
-Then, from the repository root:
-
-```powershell
-.\build-apk.cmd
-```
-
-or, on any platform:
-
-```bash
-cd android && ./gradlew assembleRelease
-```
-
-Both produce `dist/SteerTTS-release-<date>.apk`. `tools/build-apk.ps1` is the explicit version: it
-resolves the JDK/NDK/CMake/SDK (override with `-Jdk`, `-Ndk`, `-Cmake`, `-Sdk`), writes the
-machine-specific `android/local.properties`, signs with the key in `../toolchain/`, and copies the
-APK to `dist/`.
-
-Notes on the build:
-
-* Only `arm64-v8a` is built: the APK is for real phones, not emulators.
-* Native libraries are stored compressed and extracted at install, so the app also installs on
-  Android 15+ devices with 16 KB memory pages.
-* Keep `../toolchain/steertts-release.keystore` safe. Android only accepts an update signed with
-  the same key, so losing it means uninstalling (and losing settings) before the next install.
-* **Signing passwords are not in this repository**, and the build refuses to run without them
-  rather than falling back to a weak default. `tools/build-apk.ps1` reads
-  `STEERTTS_STORE_PASSWORD`, `STEERTTS_KEY_PASSWORD` and `STEERTTS_KEY_ALIAS` from the environment
-  first, then from `../toolchain/signing.properties`:
-
-  ```
-  STEERTTS_STORE_PASSWORD=...
-  STEERTTS_KEY_PASSWORD=...
-  STEERTTS_KEY_ALIAS=...
-  ```
-
-  The passwords reach Gradle as `ORG_GRADLE_PROJECT_*` environment variables, so they never appear
-  in a command line, a process listing or a build log. `.\build-apk.cmd -Configuration debug` needs
-  no key at all.
-
-## Install on the phone
-
-1. Copy `dist/SteerTTS-release-*.apk` to the phone (USB, Drive, WhatsApp — any way).
-2. Open it and allow installation from that source when asked.
-3. **Settings → Accessibility → Text-to-speech output → Preferred engine → SteerTTS.**
-4. Tap the gear next to it (that opens the app) to choose the voice and style.
-
-The app's Settings tab shows whether it is already the phone's engine, with a shortcut to the
-system screen.
+The app's Settings tab shows whether it is already the phone's engine.
 
 ## Controls
 
-Everything is delivered per utterance, so a change applies to the next thing the phone says.
-
-**Voices** — 200 bundled voices (female and male defaults), each with its own neutral speech; the
-12 controls are z-scores *relative to the selected voice*.
-
-**12 acoustic controls** (`VoicesScreen`, one slider each, −3…+3, 0 = leave it to the model):
+Every change applies to the next utterance. All twelve are z-scores against the selected voice's own
+neutral speech, −3…+3, where 0 leaves the decision to the model.
 
 | Control | What it moves |
 |---|---|
@@ -180,46 +40,62 @@ Everything is delivered per utterance, so a change applies to the next thing the
 | `voiced` | voiced share |
 | `flat` | spectral flatness |
 | `centroid` | spectral centroid (brightness) |
-| `cpps` | cepstral peak prominence (voice quality) |
+| `cpps` | cepstral peak prominence |
 | `h1h2` | H1–H2 (breathiness) |
 
-**Style tags** — `whisper`, `happiness`, `sadness`, `excited`, `serenity`, `confidence`,
-`contentment`, … set the delivery the model understands best; the presets **Natural, Calm, Warm,
-Happy, Excited, Serious, Sad, Whisper** are one tap each and combine a tag with the controls that
-follow it reliably.
+**Style presets** — Natural, Calm, Warm, Happy, Excited, Serious, Sad, Whisper. Each combines a style
+tag (`whisper`, `happiness`, `serenity`, `confidence`, …) with the controls that follow it reliably.
 
-**Speed** — a separate pace multiplier (0.7–1.6). A calling app's own speech-rate setting scales
-it, and its pitch setting is converted to `f0_med` in semitones.
+**Speed** — 0.7–1.6. An app's own speech-rate setting scales it, and its pitch setting is converted to
+semitones of `f0_med`, so TalkBack and navigation still sound natural.
 
-**Inline markup** in the text — `*emphasis*`, `[pause 300ms]`, `<whisper>like this</whisper>`.
+**Markup** — `<whisper>quietly</whisper>`, `[pause 300ms]`, `*emphasis*`.
 
-**System-wide behaviour** — `ContextStyler` adjusts delivery to context (a call is announced as an
-alert, late at night softer); the engine runs in its own `:tts` process and is only held open while
-in use.
+## Build
+
+Requirements: JDK 17–21, Android SDK (platform 36, Build Tools 35.0.1), NDK r27b, CMake 3.22.1.
+
+The weights are licence-gated (CC BY-NC). Accept the licence at
+[huggingface.co/WhissleAI/steer-tts-edge](https://huggingface.co/WhissleAI/steer-tts-edge), create a
+read token, then fetch them once:
+
+```powershell
+$env:HF_TOKEN = 'hf_...'
+python tools/fetch_model.py     # -> c/models/steer-tts-edge (~12.5 MB)
+```
+
+Then:
+
+```powershell
+.\build-apk.cmd                 # -> dist/SteerTTS-release-<date>.apk
+```
+
+`tools/build-apk.ps1` accepts `-Jdk`, `-Ndk`, `-Cmake`, `-Sdk` and `-ModelDir`. It reads the signing
+password from `STEERTTS_*` environment variables or from `../toolchain/signing.properties`; no
+credentials are stored in this repository. `python tools/check_model.py` verifies a package before it
+is packaged.
 
 ## Layout
 
 ```
-android/            the app (Gradle project; `app` module is the engine + UI)
-  app/src/main/cpp/ JNI bridge; CMake builds ../../c into libsteertts_jni.so
-  app/src/main/java/ai/whissle/steertts/demo/
-                    SteerTtsService.java  the TTS engine
-                    SteerTTS.java         engine handle + model install
-                    Style.java            12 controls, tags, presets, persistence
-                    VoicesScreen.java     the sliders and voice picker
-c/                  the engine: acoustic model, flow, vocoder, G2P, WAV/MP3 out, CLI
-legacy/             the original Kotlin/ONNX scaffold (superseded; see above)
-tools/fetch_model.py    download the gated weights
-tools/build-apk.ps1     one-command build
-dist/               built APKs
+android/   the app — SteerTtsService (the engine), voices and controls UI, JNI bridge
+c/         the engine — acoustic model, flow, vocoder, G2P
+tools/     fetch_model.py, check_model.py, build-apk.ps1
 ```
+
+## Notes
+
+- This is the **engine** build. Reading notifications aloud, announcing calls, calendar and health
+  summaries and a screen reader are not included: they need notification access, `READ_CALENDAR` and
+  Health Connect, which Play Protect flags on a sideloaded APK. Upstream's full assistant app is at
+  [WhissleAI/steer-tts](https://github.com/WhissleAI/steer-tts).
+- Only `arm64-v8a` is built. Native libraries are stored compressed, so the app also installs on
+  Android 15+ devices with 16 KB memory pages.
+- `c/models/`, `dist/` and the signing key are deliberately not in the repository.
 
 ## Credits and licence
 
-* Engine and app: Whissle AI, [WhissleAI/steer-tts](https://github.com/WhissleAI/steer-tts) —
-  inference code under the repository's MIT-style terms, app and weights under **CC BY-NC 4.0**.
-* Pronunciation data derived from the CMU Pronouncing Dictionary (BSD).
-* This repository adds the build setup, the model fetcher and this documentation.
-
-The weights are non-commercial. Copies, re-hosts or forks of this app must carry the same
-restriction, and generated audio may not be used commercially without a licence from Whissle.
+Engine and app by [Whissle AI](https://github.com/WhissleAI/steer-tts). The inference code is
+MIT-style; the weights and app are **CC BY-NC 4.0** — free for personal and research use, while any
+commercial use needs a written licence from Whissle. Pronunciation data is derived from the CMU
+Pronouncing Dictionary (BSD).

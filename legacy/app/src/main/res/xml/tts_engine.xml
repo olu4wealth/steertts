@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-  Referenced by the manifest meta-data android:speech.tts.
-  settingsActivity is intentionally omitted: pointing it at a class that does not exist makes
-  Settings crash when the user taps engine settings. Add it once a settings Activity exists.
--->
-<tts-engine xmlns:android="http://schemas.android.com/apk/res/android" />

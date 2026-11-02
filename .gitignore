@@ -25,8 +25,3 @@ toolchain/
 
 # Build logs from tools/build-apk.ps1
 *.log
-
-# ---------------------------------------------------------------- legacy/ (Kotlin scaffold)
-.kotlin/
-.kt_metadata/
-.kt_kapt_stubs/
